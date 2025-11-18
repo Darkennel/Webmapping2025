@@ -23,3 +23,4 @@ $stmt->execute();
 
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 echo json_encode($data);
+// test commit (j'ai la mémoire courte)
