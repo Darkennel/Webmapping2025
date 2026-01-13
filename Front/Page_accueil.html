@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenue - Localisation</title>
+
+    <style>
+        /* 1. MISE EN PAGE CENTRÉE (FLEXBOX) */
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center; /* Centre horizontalement */
+            align-items: center;     /* Centre verticalement */
+            background-color: #f0f2f5;
+            font-family: 'bahnschrift', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* 2. LA BOITE BLANCHE */
+        .container {
+            background: rgba(255, 255, 255, 0.587);
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 { margin-bottom: 20px; color: #333; font-size: 30px;}
+        h2 { margin-bottom: 20px; color: #333; font-size: 24px; text-align: center; text-decoration: color-mix(in #1a8a3b,#b122a7); }
+        
+        /* 3. LES CHAMPS ET BOUTONS */
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            outline: none;
+        }
+        input[type="text"]:focus { border-color: #0078A8; }
+
+        /* Le bouton GPS (Icone) */
+        .btn-gps {
+            background-color: #178d28;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            width: 50px;
+            cursor: pointer;
+            font-size: 20px;
+            transition: background 0.3s;
+        }
+        .btn-gps:hover { background-color: #005a80; }
+
+        /* Le gros bouton de validation */
+        .btn-valider {
+            background-color: #22b14c;
+            color: rgb(255, 255, 255);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+        }
+        .btn-valider:hover { background-color: #1a8a3b; }
+        .btn-valider:disabled { background-color: #bdbcbc; cursor: not-allowed; }
+
+        /* Feedback visuel */
+        #status {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #666;
+            min-height: 20px;
+        }
+        .success { color: green !important; }
+        .error { color: red !important; }
+
+    </style>
+</head>
+<body>
+
+    <div class="container1">
+        <h1> Êtes-vous en danger actuellement ? </h1>
+        <h2>Où êtes vous ? 📍</h2>
+        
+        <div class="input-group">
+            <input type="text" id="adresseInput" placeholder="Saisir une adresse..." />
+            
+            <button id="btnGps" class="btn-gps" title="Utiliser la position de l'appareil">
+                📡
+            </button>
+        </div>
+
+        <div id="status">En attente de localisation...</div>
+        
+        <button id="btnContinuer" class="btn-valider" disabled>
+            CONTINUER
+        </button>
+    </div>
+
+    <script>
+        // --- VARIABLE GLOBALE DE STOCKAGE ---
+        // C'est ici que sont stockées les coordonnées finales
+        let userLocation = {
+            lat: null,
+            lon: null,
+            source: null // 'GPS' ou 'Adresse'
+        };
+
+        // Éléments du DOM
+        const adresseInput = document.getElementById('adresseInput');
+        const btnGps = document.getElementById('btnGps');
+        const statusDiv = document.getElementById('status');
+        const btnContinuer = document.getElementById('btnContinuer');
+
+        // --- 1. FONCTION DE MISE À JOUR DE LA VARIABLE ---
+        function updateLocation(lat, lon, src) {
+            // Mise à jour de la variable
+            userLocation.lat = lat;
+            userLocation.lon = lon;
+            userLocation.source = src;
+
+            // Feedback visuel
+            console.log("Coordonnées stockées :", userLocation);
+            statusDiv.innerHTML = `Localisé via <b>${src}</b> <br> (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+            statusDiv.className = 'success';
+            
+            // On active le bouton suite
+            btnContinuer.disabled = false;
+        }
+
+        // --- 2. LOGIQUE GPS (Navigateur) ---
+        btnGps.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                statusDiv.innerText = "Erreur : GPS non supporté par ce navigateur.";
+                return;
+            }
+
+            statusDiv.innerText = "Recherche satellite en cours...";
+            statusDiv.className = '';
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    // Succès
+                    updateLocation(position.coords.latitude, position.coords.longitude, 'GPS');
+                    // Optionnel : Vider le champ adresse pour éviter la confusion
+                    adresseInput.value = "Ma position actuelle"; 
+                },
+                (error) => {
+                    // Erreur
+                    statusDiv.innerText = "Impossible de vous localiser (Autorisation refusée ?).";
+                    statusDiv.className = 'error';
+                    console.error(error);
+                }
+            );
+        });
+
+        // --- 3. LOGIQUE ADRESSE (API Nominatim) ---
+        // Déclenchement quand on appuie sur Entrée dans le champ
+        adresseInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                chercherAdresse();
+            }
+        });
+
+        function chercherAdresse() {
+            const query = adresseInput.value;
+            if (query.length < 3) return;
+
+            statusDiv.innerText = "Recherche de l'adresse...";
+            
+            fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        const lat = parseFloat(data[0].lat);
+                        const lon = parseFloat(data[0].lon);
+                        updateLocation(lat, lon, 'Adresse');
+                    } else {
+                        statusDiv.innerText = "Adresse introuvable.";
+                        statusDiv.className = 'error';
+                        userLocation.lat = null; // Reset si erreur
+                        btnContinuer.disabled = true;
+                    }
+                })
+                .catch(err => {
+                    statusDiv.innerText = "Erreur de connexion.";
+                    console.error(err);
+                });
+        }
+
+        // --- 4. ACTION FINALE ---
+        btnContinuer.addEventListener('click', () => {
+            alert(`C'est parti ! \nDestination : ${userLocation.lat}, ${userLocation.lon}`);
+            // ICI : Tu pourras rediriger vers ta carte ou envoyer les données
+            // window.location.href = `carte.html?lat=${userLocation.lat}&lon=${userLocation.lon}`;
+        });
+
+    </script>
+</body>
+</html>

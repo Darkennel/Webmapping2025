@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ma Carte de Vigilance Météo</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+    <style>
+        /* On dit à la carte de prendre tout l'écran */
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        // --- C'EST ICI QUE TU CODES TON JS ---
+
+        // A. On initialise la carte centrée sur la France
+        // (46.5, 2.5) sont les coordonnées, '6' est le niveau de zoom
+        var map = L.map('map').setView([46.603354, 1.888334], 6);
+
+        // B. On ajoute un fond de carte "OpenStreetMap" (Le plan de ville)
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        // C. On ajoute TA couche GeoServer (Vigilance Météo)
+        // C'est le protocole WMS
+        var vigilanceLayer = L.tileLayer.wms('http://localhost:8080/geoserver/webmapping/wms', {
+            layers: 'meteo_vigilance_live', // 
+            format: 'image/png',            // On veut du PNG pour la transparence
+            transparent: true,              // Fond transparent pour voir les routes dessous
+            version: '1.1.0',
+            attribution: "Données Météo-France"
+        });
+
+        // On l'ajoute à la carte
+        vigilanceLayer.addTo(map);
+
+    </script>
+</body>
+</html>
