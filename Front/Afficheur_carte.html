@@ -5,61 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualiseur WMS GeoServer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <link rel="stylesheet" href="StyleAfficheurCarte.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: Arial, sans-serif;
-        }
-        #map {
-            height: 100vh;
-            width: 100%;
-        }
-        .controls {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: white;
-            padding: 15px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-            z-index: 1000;
-            max-width: 350px;
-        }
-        input {
-            width: 100%;
-            padding: 8px;
-            margin: 5px 0;
-            border: 1px solid #ccc;
-            border-radius: 3px;
-        }
-        button {
-            width: 100%;
-            padding: 10px;
-            margin: 5px 0;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-        button:hover {
-            background: #45a049;
-        }
-        label {
-            font-size: 12px;
-            font-weight: bold;
-            display: block;
-            margin-top: 8px;
-        }
-        h3 {
-            margin-bottom: 10px;
-        }
-    </style>
+    
 </head>
 <body>
     <div id="map"></div>
@@ -68,43 +16,162 @@
         <h3>Ajouter une couche WMS</h3>
         
         <label>URL du serveur WMS :</label>
-        <input type="text" id="wmsUrl" placeholder="http://localhost:8080/geoserver">
+        <input type="text" id="wmsUrl" value="http://100.81.197.4:8080/geoserver/wms">
         
-        <label>Nom de la couche :</label>
-        <input type="text" id="layerName" placeholder="workspace:layername">
+        <label for="layerName">Nom de la couche :</label>
+        <label for="layerSelect">Couche WMS :</label>
+        <select id="layerSelect">
+            <option value="">Chargement des couches...</option>
+        </select>
         
         <button onclick="addWMSLayer()">Ajouter la couche</button>
     </div>
 
     <script>
+        // Lire les paramètres dans l'URL
+        const urlParams = new URLSearchParams(window.location.search); // utilisation des coordonnées passées en paramètres de l'url
+        const lat = urlParams.get('lat');
+        const lon = urlParams.get('lon');
         // Initialiser la carte
-        const map = L.map('map').setView([43.6108, 3.8767], 10);
+        const map = L.map('map').setView([lat, lon], 13);
 
         // Ajouter le fond de carte OpenStreetMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
+        
+        let wmsLayer = null;
 
-        // Fonction pour ajouter une couche WMS
-        function addWMSLayer() {
-            const wmsUrl = document.getElementById('wmsUrl').value;
-            const layerName = document.getElementById('layerName').value;
-            
-            if (!wmsUrl || !layerName) {
-                alert('Veuillez remplir tous les champs');
-                return;
+        //Récupération des couche WMS
+        async function loadLayers() {
+    const url = 'http://100.81.197.4:8080/geoserver/rest/workspaces/webmapping/layers.json';
+    const auth = btoa('admin:geoserver'); // ⚠️ dev uniquement
+
+    const select = document.getElementById('layerSelect');
+    if (!select) {
+        console.error("Select layerSelect introuvable dans le DOM");
+        return;
+    }
+
+    select.innerHTML = '<option>Chargement...</option>';
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Accept': 'application/json'
             }
-            
-            // Créer et ajouter la couche WMS
-            L.tileLayer.wms(wmsUrl, {
-                layers: layerName,
-                format: 'image/png',
-                transparent: true,
-                attribution: 'GeoServer'
-            }).addTo(map);
-            
-            alert('Couche ajoutée !');
+        });
+
+        if (!response.ok) throw new Error("Erreur serveur");
+
+        const data = await response.json();
+        const layers = data.layers.layer;
+
+        select.innerHTML = '';
+
+        if (layers && layers.length > 0) {
+            layers.forEach(layer => {
+                const option = document.createElement('option');
+                option.value = layer.name;
+                option.textContent = layer.name;
+                select.appendChild(option);
+            });
+        } else {
+            select.innerHTML = '<option disabled>Aucune couche trouvée</option>';
         }
+
+    } catch (error) {
+        console.error("Erreur:", error);
+        select.innerHTML = '<option disabled>Erreur de connexion</option>';
+    }
+}
+
+            // Fonction pour ajouter une couche WMS
+        function addWMSLayer() {
+
+                const wmsUrl = document.getElementById('wmsUrl').value;
+                const layerName = document.getElementById('layerSelect').value;
+
+                //Calcul Emprise :
+
+                if (!wmsUrl || !layerName) {
+                    alert('Veuillez remplir tous les champs');
+                    return;
+                }
+
+                    //  Supprimer la couche existante si elle existe
+                if (wmsLayer) {
+                    map.removeLayer(wmsLayer);
+                }
+                
+                // Créer et ajouter la couche WMS
+                wmsLayer = L.tileLayer.wms(wmsUrl, {
+                    layers: layerName,
+                    format: 'image/png',
+                    transparent: true,
+                    attribution: 'GeoServer',
+                    //  bounds:map.getBounds()
+                }).addTo(map);
+                
+                alert('Couche ajoutée !');
+            }
+
+
+                // --- Lancement au chargement de la page ---
+                window.addEventListener('DOMContentLoaded', (event) => {
+            loadLayers();
+                });
+
+            // Affiche des infos On click
+                map.on('click', function (e) {
+
+        if (!wmsLayer) return;
+
+        const point = map.latLngToContainerPoint(e.latlng, map.getZoom());
+        const size = map.getSize();
+
+        const params = {
+            request: 'GetFeatureInfo',
+            service: 'WMS',
+            srs: 'EPSG:4326',
+            styles: '',
+            transparent: true,
+            version: '1.1.1',
+            format: 'image/png',
+            bbox: map.getBounds().toBBoxString(),
+            height: size.y,
+            width: size.x,
+            layers: wmsLayer.options.layers,
+            query_layers: wmsLayer.options.layers,
+            info_format: 'application/json',
+            x: Math.floor(point.x),
+            y: Math.floor(point.y)
+        };
+
+        const url = wmsLayer._url + L.Util.getParamString(params);
+
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.features && data.features.length > 0) {
+                    const props = data.features[0].properties;
+
+                    let content = '<b>Informations :</b><br>';
+                    for (let key in props) {
+                        content += `${key} : ${props[key]}<br>`;
+                    }
+
+                    L.popup()
+                        .setLatLng(e.latlng)
+                        .setContent(content)
+                        .openOn(map);
+                }
+            });
+        });
+
+
     </script>
 </body>
 </html>

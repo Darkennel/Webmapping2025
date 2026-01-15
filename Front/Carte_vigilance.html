@@ -34,13 +34,14 @@
 
         // C. On ajoute TA couche GeoServer (Vigilance Météo)
         // C'est le protocole WMS
-        var vigilanceLayer = L.tileLayer.wms('http://localhost:8080/geoserver/webmapping/wms', {
+        var vigilanceLayer = L.tileLayer.wms('http://100.81.197.4:8080/geoserver/wms', {
             layers: 'meteo_vigilance_live', // 
             format: 'image/png',            // On veut du PNG pour la transparence
             transparent: true,              // Fond transparent pour voir les routes dessous
             version: '1.1.0',
             attribution: "Données Météo-France"
         });
+        
 
         // On l'ajoute à la carte
         vigilanceLayer.addTo(map);
