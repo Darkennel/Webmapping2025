@@ -24,7 +24,7 @@
             <option value="">Chargement des couches...</option>
         </select>
         
-        <button onclick="addWMSLayer()">Ajouter la couche</button>
+        <button onclick=    handleLayerAddition()>Ajouter la couche</button>
     </div>
 
     <script>
@@ -36,14 +36,52 @@
         const map = L.map('map').setView([lat, lon], 13);
 
         // Ajouter le fond de carte OpenStreetMap
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+         L.tileLayer('https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.jpg', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
         
         let wmsLayer = null;
 
+        // Tri des couches suivant WMS et WFS 
+        // Vos listes de couches (noms techniques GeoServer)
+const layersWFS = [
+    'vue_atmo_complete',
+    'meteo_vigilance_live'
+];
+
+const layersWMS = [
+    'Debroussaillement_light',
+    'inondation',
+    'pluie'
+];
+
+function handleLayerAddition() {
+    const layerName = document.getElementById('layerSelect').value;
+
+    if (!layerName) {
+        alert("Veuillez sélectionner une couche dans la liste.");
+        return;
+    }
+
+    // On vérifie dans quelle liste se trouve la couche
+    if (layersWFS.includes(layerName)) {
+        console.log("Mode WFS détecté pour :", layerName);
+        addWFSLayer(urlParams.get('lon'),urlParams.get('lat'),layerName);
+    } 
+    else if (layersWMS.includes(layerName)) {
+        console.log("Mode WMS détecté pour :", layerName);
+        addWMSLayer();
+    } 
+    else {
+        // Optionnel : Comportement par défaut si la couche n'est dans aucune liste
+        console.warn("La couche n'est pas répertoriée, utilisation du WMS par défaut.");
+        addWMSLayer();
+    }
+}
+
         //Récupération des couche WMS
         async function loadLayers() {
+
     const url = 'http://100.81.197.4:8080/geoserver/rest/workspaces/webmapping/layers.json';
     const auth = btoa('admin:geoserver'); // ⚠️ dev uniquement
 
@@ -87,7 +125,51 @@
         select.innerHTML = '<option disabled>Erreur de connexion</option>';
     }
 }
+      
+let wfsLayer = null; // Pour pouvoir effacer le polygone précédent
+async function addWFSLayer(lat, lon, layerName) {
+    const baseURL = "http://100.81.197.4:8080/geoserver/webmapping/wfs";
 
+    // CORRECTION 1 : L'ordre est Longitude puis Latitude dans POINT()
+    const cqlFilter = `INTERSECTS(geom, SRID=4326;POINT(${lat} ${lon}))`;
+
+    const params = new URLSearchParams({
+        service: 'WFS',
+        version: '2.0.0',
+        request: 'GetFeature',
+        typeNames: `webmapping:${layerName}`, // Utilise le nom dynamique
+        outputFormat: 'application/json',
+        CQL_FILTER: cqlFilter
+    });
+
+    try {
+        const response = await fetch(`${baseURL}?${params.toString()}`);
+        const data = await response.json();
+        // Nettoyage si un polygone existe déjà
+        if (wfsLayer) map.removeLayer(wfsLayer);
+        console.log(data.features[0]);
+
+        if (data.features && data.features.length > 0) {
+            // CORRECTION 2 : On stocke dans la variable globale et on utilise L.geoJSON
+            const layer = L.geoJSON(data, {
+                style: {
+                    color: 'red',
+                    weight: 3,
+                    fillOpacity : 1
+                }
+
+            }).addTo(map);
+
+            // Centrer la carte sur le résultat
+          //  map.fitBounds(wfsLayer.getBounds());
+          console.log("Zone affichée :", data.features[0].properties.nom_zone);            
+        } else {
+            alert("Aucune donnée trouvée à cet emplacement pour cette couche.");
+        }
+    } catch (error) {
+        console.error("Erreur WFS :", error);
+    }
+}
             // Fonction pour ajouter une couche WMS
         function addWMSLayer() {
 
@@ -112,6 +194,7 @@
                     format: 'image/png',
                     transparent: true,
                     attribution: 'GeoServer',
+                    tiled : true,
                     //  bounds:map.getBounds()
                 }).addTo(map);
                 
