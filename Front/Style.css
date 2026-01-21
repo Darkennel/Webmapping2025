@@ -22,6 +22,7 @@
 h1 { margin-bottom: 20px; color: #333; font-size: 30px;}
 h2 { margin-bottom: 20px; color: #333; font-size: 24px; text-align: center; text-decoration: color-mix(in #1a8a3b,#b122a7); }
 
+
 /* 3. LES CHAMPS ET BOUTONS */
 .input-group {
     display: flex;
@@ -76,3 +77,11 @@ input[type="text"]:focus { border-color: #0078A8; }
 }
 .success { color: green !important; }
 .error { color: red !important; }
+
+img {
+    max-width: 300px;
+    height: auto;
+    display: block;
+    margin: auto;
+}
+

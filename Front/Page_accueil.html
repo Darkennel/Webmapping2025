@@ -9,13 +9,15 @@
 
 </head>
 <body>
-
+    
     <div class="container1">
+        <img src="Logo.png" alt="Logo de GeoWarning">
         <h1> Êtes-vous en danger actuellement ? </h1>
         <h2>Où êtes vous ? 📍</h2>
         
         <div class="input-group">
             <input type="text" id="adresseInput" placeholder="Saisir une adresse..." />
+
             
             <button id="btnGps" class="btn-gps" title="Utiliser la position de l'appareil">
                 📡
@@ -125,7 +127,8 @@
             alert(`C'est parti ! \nDestination : ${userLocation.lat}, ${userLocation.lon}`);
             // ICI : Tu pourras rediriger vers ta carte ou envoyer les données
             if ( userLocation.lat && userLocation.lon){
-                window.location.href = `Afficheur_carte.html?lat=${userLocation.lat}&lon=${userLocation.lon}`;
+                const adresse = encodeURIComponent(adresseInput.value);
+                window.location.href = `Afficheur_carte.html?lat=${userLocation.lat}&lon=${userLocation.lon}&adresse=${adresse}`;
             }
         });
 

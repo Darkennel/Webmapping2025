@@ -10,21 +10,43 @@
     
 </head>
 <body>
-    <div id="map"></div>
-    
-    <div class="controls">
-        <h3>Ajouter une couche WMS</h3>
-        
-        <label>URL du serveur WMS :</label>
-        <input type="text" id="wmsUrl" value="http://100.81.197.4:8080/geoserver/wms">
-        
-        <label for="layerName">Nom de la couche :</label>
-        <label for="layerSelect">Couche WMS :</label>
-        <select id="layerSelect">
+    <div class="page">
+  
+      <!-- PARTIE GAUCHE -->
+      <div class="left-panel">
+        <h2>Résumé de l'état de danger :</h2>
+        <p id ='etatdelair'></p>
+        <p id ='etatdepluie'></p>
+
+        <div class ="localisation">
+            <strong>LOCALISATION : </strong>
+            <ul id = "localisationValue"></ul>
+
+        </div>
+      </div>
+  
+      <!-- PARTIE DROITE -->
+      <div class="right-panel">
+  
+        <!-- LA CARTE -->
+        <div id="map"></div>
+  
+        <!-- LES CONTROLES (hors map) -->
+        <div class="controls">
+          <h3>Ajouter une couche WMS</h3>
+          <label>URL du serveur WMS :</label>
+          <input type="text" id="wmsUrl" value="http://100.81.197.4:8080/geoserver/wms">
+          
+          <label for="layerSelect">Couche WMS :</label>
+          <select id="layerSelect">
             <option value="">Chargement des couches...</option>
-        </select>
-        
-        <button onclick=    handleLayerAddition()>Ajouter la couche</button>
+          </select>
+          
+          <button onclick="handleLayerAddition()">Ajouter la couche</button>
+        </div>
+  
+      </div>
+  
     </div>
 
     <script>
@@ -32,6 +54,9 @@
         const urlParams = new URLSearchParams(window.location.search); // utilisation des coordonnées passées en paramètres de l'url
         const lat = urlParams.get('lat');
         const lon = urlParams.get('lon');
+        const adresse = urlParams.get('adresse');
+        //afficher les coordonnées dans la balise localisation
+        document.getElementById('localisationValue').innerHTML = `${adresse} <br> Latitude : ${lat} <br> Longitude : ${lon}`;
         // Initialiser la carte
         const map = L.map('map').setView([lat, lon], 13);
 
@@ -144,11 +169,10 @@ async function addWFSLayer(lat, lon, layerName) {
 
     try {
         const response = await fetch(`${baseURL}?${params.toString()}`);
+        console.log(response);
         const data = await response.json();
         // Nettoyage si un polygone existe déjà
         if (wfsLayer) map.removeLayer(wfsLayer);
-        console.log(data.features[0]);
-
         if (data.features && data.features.length > 0) {
             // CORRECTION 2 : On stocke dans la variable globale et on utilise L.geoJSON
             const layer = L.geoJSON(data, {
@@ -200,11 +224,59 @@ async function addWFSLayer(lat, lon, layerName) {
                 
                 alert('Couche ajoutée !');
             }
+    async function infoetatDeLair(lat,lon){
+        const baseURL = "http://100.81.197.4:8080/geoserver/webmapping/wfs";
+        const cqlFilter = `INTERSECTS(geom, SRID=4326;POINT(${lon} ${lat}))`;
 
+        const params = new URLSearchParams({
+        service: 'WFS',
+        version: '2.0.0',
+        request: 'GetFeature',
+        typeNames: `webmapping:vue_atmo_complete`,
+        outputFormat: 'application/json',
+        CQL_FILTER: cqlFilter
+    });
+    try {
+        const response = await fetch(`${baseURL}?${params.toString()}`);
+        //console.log(response);
+        const data = await response.json();
+      //  console.log(data);
+        const etatDeAir = data.features[0].properties.lib_qual;
+        document.getElementById('etatdelair').innerHTML = `l'air est : ${etatDeAir}`;
+        } catch (error){
+            console.error('Erreur WFS : ', error)
+        }
+    } 
+    async function infoPluie(lat,lon){
+        const baseURL = "http://100.81.197.4:8080/geoserver/webmapping/wms";
+        const cqlFilter = `INTERSECTS(geom, SRID=4326;POINT(${lat} ${lon}))`;
+
+        const params = new URLSearchParams({
+        service: 'WFS',
+        version: '2.0.0',
+        request: 'GetFeature',
+        typeNames: `webmapping:vue_pluie_vecteur`,
+        outputFormat: 'application/json',
+        CQL_FILTER: cqlFilter
+    });
+    try {
+        const response = await fetch(`${baseURL}?${params.toString()}`);
+        console.log(response);
+        const data = await response.json();
+        console.log(data);
+        const Precipitation = data.features[0].properties.precipitation;
+        document.getElementById('etatdepluie').innerHTML = `la pluie est : ${Precipitation}`;
+        } catch (error){
+            console.error('Erreur WFS : ', error)
+        }        
+    }
 
                 // --- Lancement au chargement de la page ---
                 window.addEventListener('DOMContentLoaded', (event) => {
             loadLayers();
+            infoetatDeLair(lat,lon);
+            infoPluie(lat,lon);
+
                 });
 
             // Affiche des infos On click
