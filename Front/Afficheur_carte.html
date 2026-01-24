@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualiseur WMS GeoServer</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <title>GeoWarning</title>
+    <link rel="stylesheet" href="leaflet.css" />
     <link rel="stylesheet" href="StyleAfficheurCarte.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="leaflet.js"></script>
     
 </head>
 <body>
@@ -17,12 +17,22 @@
         <h2>Résumé de l'état de danger :</h2>
         <p id ='etatdelair'></p>
         <p id ='etatdepluie'></p>
+        <p id='etatvigilance'></p>
+        <p id="infoInondation"></p>
+        <p id="infoDebrou"></p>
+        
 
         <div class ="localisation">
             <strong>LOCALISATION : </strong>
             <ul id = "localisationValue"></ul>
+        
 
         </div>
+                <div class ="legende-box"
+                    id = "panneauLegende"></div>
+        
+        <div></div>
+            <div id="panneauSource" class="legende-box"></div>
       </div>
   
       <!-- PARTIE DROITE -->
@@ -33,16 +43,16 @@
   
         <!-- LES CONTROLES (hors map) -->
         <div class="controls">
-          <h3>Ajouter une couche WMS</h3>
-          <label>URL du serveur WMS :</label>
-          <input type="text" id="wmsUrl" value="http://100.81.197.4:8080/geoserver/wms">
+          <h3>Visualiser une couche</h3>
+<!--           <label>URL du serveur WMS :</label>
+          <input type="text" id="wmsUrl" value="/geoserver/wms"> -->
           
-          <label for="layerSelect">Couche WMS :</label>
+          <label for="layerSelect">Couches disponibles :</label>
           <select id="layerSelect">
             <option value="">Chargement des couches...</option>
           </select>
           
-          <button onclick="handleLayerAddition()">Ajouter la couche</button>
+          <button onclick="handleLayerAddition()">Visualiser une couche</button>
         </div>
   
       </div>
@@ -60,11 +70,28 @@
         // Initialiser la carte
         const map = L.map('map').setView([lat, lon], 13);
 
+        map.createPane('gpsPane');
+        
+        map.getPane('gpsPane').style.zIndex = 650;
+
         // Ajouter le fond de carte OpenStreetMap
          L.tileLayer('https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.jpg', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
+
+            L.circleMarker([lat, lon], {
+        pane: 'gpsPane',
+        radius: 8,           // Taille du point
+        fillColor: "#3388ff",// Bleu
+        color: "#fff",       // Bordure blanche
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.8
+    }).addTo(map).bindPopup("Ma position");
+
+
         
+    
         let wmsLayer = null;
 
         // Tri des couches suivant WMS et WFS 
@@ -72,12 +99,13 @@
 const layersWFS = [
     'vue_atmo_complete',
     'meteo_vigilance_live'
+   
 ];
 
 const layersWMS = [
+    'pluie',
     'Debroussaillement_light',
-    'inondation',
-    'pluie'
+    'inondation'
 ];
 
 function handleLayerAddition() {
@@ -88,10 +116,13 @@ function handleLayerAddition() {
         return;
     }
 
+    updateLegend(layerName);
+    updateSource(layerName);
+
     // On vérifie dans quelle liste se trouve la couche
     if (layersWFS.includes(layerName)) {
         console.log("Mode WFS détecté pour :", layerName);
-        addWFSLayer(urlParams.get('lon'),urlParams.get('lat'),layerName);
+        addWFSLayer(urlParams.get('lat'), urlParams.get('lon'), layerName);
     } 
     else if (layersWMS.includes(layerName)) {
         console.log("Mode WMS détecté pour :", layerName);
@@ -105,16 +136,29 @@ function handleLayerAddition() {
 }
 
         //Récupération des couche WMS
-        async function loadLayers() {
+// CONFIGURATION DE L'AFFICHAGE
+// 1. Les couches à CACHER (Liste noire)
+const hiddenLayers = [
+    'vue_pluie_vecteur',  // Celle avec les gros carrés lourds
+    'ind_ind_atmo',         
+];
 
-    const url = 'http://100.81.197.4:8080/geoserver/rest/workspaces/webmapping/layers.json';
-    const auth = btoa('admin:geoserver'); // ⚠️ dev uniquement
+// 2. Les couches à RENOMMER (Dictionnaire)
+// "Nom_Technique_GeoServer" : "Joli Nom à Afficher"
+const layerNiceNames = {
+    'meteo_vigilance_live': '🌩️ Vigilance Météo (Direct)',
+    'inondation': '💧 Zones Inondables (PPRI)',
+    'Debroussaillement_light': '🔥 Obligation Débroussaillement',
+    'vue_atmo_complete': '🌫️ Qualité de l\'Air',
+    'pluie': '☔ Pluie (Radar Météo France)'
+};
+
+async function loadLayers() {
+    const url = '/geoserver/rest/workspaces/webmapping/layers.json';
+    const auth = btoa('admin:webmapping2026'); 
 
     const select = document.getElementById('layerSelect');
-    if (!select) {
-        console.error("Select layerSelect introuvable dans le DOM");
-        return;
-    }
+    if (!select) return;
 
     select.innerHTML = '<option>Chargement...</option>';
 
@@ -132,17 +176,36 @@ function handleLayerAddition() {
         const data = await response.json();
         const layers = data.layers.layer;
 
-        select.innerHTML = '';
+        select.innerHTML = ''; // On vide le select
+        
+        // Option par défaut
+        const defaultOption = document.createElement('option');
+        defaultOption.value = "";
+        defaultOption.textContent = "-- Choisir une couche --";
+        select.appendChild(defaultOption);
 
         if (layers && layers.length > 0) {
             layers.forEach(layer => {
+                
+                // FILTRE : Si la couche est dans la liste noire, on la saute (continue)
+                if (hiddenLayers.includes(layer.name)) {
+                    return; 
+                }
+
                 const option = document.createElement('option');
-                option.value = layer.name;
-                option.textContent = layer.name;
+                
+                // IMPORTANT : La valeur reste le nom technique (pour que le code marche)
+                option.value = layer.name; 
+                
+                // AFFICHAGE : On regarde dans le dictionnaire, sinon on garde le nom technique
+                if (layerNiceNames[layer.name]) {
+                    option.textContent = layerNiceNames[layer.name];
+                } else {
+                    option.textContent = layer.name; // Fallback si pas de joli nom défini
+                }
+                
                 select.appendChild(option);
             });
-        } else {
-            select.innerHTML = '<option disabled>Aucune couche trouvée</option>';
         }
 
     } catch (error) {
@@ -152,80 +215,142 @@ function handleLayerAddition() {
 }
       
 let wfsLayer = null; // Pour pouvoir effacer le polygone précédent
-async function addWFSLayer(lat, lon, layerName) {
-    const baseURL = "http://100.81.197.4:8080/geoserver/webmapping/wfs";
 
-    // CORRECTION 1 : L'ordre est Longitude puis Latitude dans POINT()
-    const cqlFilter = `INTERSECTS(geom, SRID=4326;POINT(${lat} ${lon}))`;
+
+async function addWFSLayer(lat, lon, layerName) {
+    const baseURL = "/geoserver/webmapping/wfs";
+
+    // 1. ON DÉFINIT LA VARIABLE MANQUANTE !
+    // On remet le filtre pour que la vigilance ne charge QUE le département sous le point.
+    // Rappel : Ordre Longitude Latitude pour WFS 1.0.0
+    // On précise SRID=4326 pour dire à GeoServer : "Attention, ce sont des coordonnées GPS !"
+const cqlFilter = `INTERSECTS(geom, SRID=4326;POINT(${lon} ${lat}))`;
 
     const params = new URLSearchParams({
         service: 'WFS',
-        version: '2.0.0',
+        version: '1.0.0', 
         request: 'GetFeature',
-        typeNames: `webmapping:${layerName}`, // Utilise le nom dynamique
+        typeName: `webmapping:${layerName}`,
         outputFormat: 'application/json',
-        CQL_FILTER: cqlFilter
+        srsName: 'EPSG:4326',
+        CQL_FILTER: cqlFilter // <--- Maintenant, la variable existe juste au-dessus !
     });
 
-    try {
-        const response = await fetch(`${baseURL}?${params.toString()}`);
-        console.log(response);
-        const data = await response.json();
-        // Nettoyage si un polygone existe déjà
-        if (wfsLayer) map.removeLayer(wfsLayer);
-        if (data.features && data.features.length > 0) {
-            // CORRECTION 2 : On stocke dans la variable globale et on utilise L.geoJSON
-            const layer = L.geoJSON(data, {
-                style: {
-                    color: 'red',
-                    weight: 3,
-                    fillOpacity : 1
-                }
+    const fullURL = `${baseURL}?${params.toString()}`;
+    console.log("Chargement WFS filtré :", fullURL);
 
+    try {
+        const response = await fetch(fullURL);
+
+        if (!response.ok) {
+            console.error("Erreur GeoServer");
+            return;
+        }
+
+        const data = await response.json();
+
+        // Nettoyage de l'ancienne couche
+// 1. On efface l'ancien WFS (ça tu l'avais déjà)
+        if (wfsLayer) {
+            map.removeLayer(wfsLayer);
+            wfsLayer = null;
+        }
+
+        // 2. AJOUT : On efface aussi l'ancien WMS (Débroussaillement/Inondation/Pluie) !
+        if (wmsLayer) {
+            map.removeLayer(wmsLayer);
+            wmsLayer = null;
+        }
+
+        if (data.features && data.features.length > 0) {
+           wfsLayer = L.geoJSON(data, {
+                
+                style: function(feature) {
+                    // CAS 1 : VIGILANCE METEO
+                    if (layerName.includes('vigilance')) {
+                        const niveau = feature.properties.niveau_vigilance;
+                        let codeCouleur = 'green';
+                        if (niveau == 2) codeCouleur = '#FFD700'; // Jaune
+                        if (niveau == 3) codeCouleur = 'orange';  // Orange
+                        if (niveau == 4) codeCouleur = 'red';     // Rouge
+                        return { 
+                            color: codeCouleur, 
+                            fillColor: codeCouleur, 
+                            weight: 3, 
+                            fillOpacity: 0.4 
+                        };
+                    }
+                    if (layerName.includes('atmo')) {
+                        const niveau = feature.properties.code_qual;
+                        let codeCouleur1 = '#50f0e6';
+                        if (niveau == 2) codeCouleur1 = '#63bda4';
+                        if (niveau == 3) codeCouleur1 = '#efe643';
+                        if (niveau == 4) codeCouleur1 = '#ea5254';
+                        if (niveau == 5) codeCouleur1 = '#951636';
+                        if (niveau == 6) codeCouleur1 = '#882081';
+                        return { 
+                            color: codeCouleur1, 
+                            fillColor: codeCouleur1, 
+                            weight: 3, 
+                            fillOpacity: 0.4 
+                        };
+                    }
+                    // Autres cas WFS éventuels...
+                    return { color: 'gray', weight: 2, fillOpacity: 0.4 };
+                },
+
+                onEachFeature: function(feature, layer) {
+                     if(feature.properties.nom_officiel) {
+                        layer.bindPopup(feature.properties.nom_officiel);
+                     }
+                }
             }).addTo(map);
 
-            // Centrer la carte sur le résultat
-          //  map.fitBounds(wfsLayer.getBounds());
-          console.log("Zone affichée :", data.features[0].properties.nom_zone);            
+            console.log("✅ Couche Vigilance (Département) chargée !");
+            map.fitBounds(wfsLayer.getBounds());
+
         } else {
-            alert("Aucune donnée trouvée à cet emplacement pour cette couche.");
+            alert("Aucune donnée de vigilance trouvée pour votre position.");
         }
+
     } catch (error) {
-        console.error("Erreur WFS :", error);
+        console.error("Erreur JS :", error);
     }
 }
             // Fonction pour ajouter une couche WMS
-        function addWMSLayer() {
+       function addWMSLayer() {
+    const wmsUrl = "/geoserver/webmapping/wms"; // Ton URL propre
+    const layerName = document.getElementById('layerSelect').value;
 
-                const wmsUrl = document.getElementById('wmsUrl').value;
-                const layerName = document.getElementById('layerSelect').value;
+    if (!layerName) {
+        alert('Veuillez sélectionner une couche.');
+        return;
+    }
 
-                //Calcul Emprise :
-
-                if (!wmsUrl || !layerName) {
-                    alert('Veuillez remplir tous les champs');
-                    return;
-                }
-
-                    //  Supprimer la couche existante si elle existe
-                if (wmsLayer) {
-                    map.removeLayer(wmsLayer);
-                }
-                
-                // Créer et ajouter la couche WMS
-                wmsLayer = L.tileLayer.wms(wmsUrl, {
-                    layers: layerName,
-                    format: 'image/png',
-                    transparent: true,
-                    attribution: 'GeoServer',
-                    tiled : true,
-                    //  bounds:map.getBounds()
-                }).addTo(map);
-                
-                alert('Couche ajoutée !');
-            }
+    // Nettoyage WFS si besoin (pour éviter d'avoir les 2 en même temps)
+    if (typeof wfsLayer !== 'undefined' && wfsLayer) {
+        map.removeLayer(wfsLayer);
+        wfsLayer = null;
+    }
+    // Nettoyage WMS précédent
+    if (wmsLayer) {
+        map.removeLayer(wmsLayer);
+    }
+    
+    // Ajout de la couche WMS
+    wmsLayer = L.tileLayer.wms(wmsUrl, {
+        layers: `webmapping:${layerName}`, // Ajout auto du workspace
+        format: 'image/png',
+        transparent: true,  // <--- C'est ça qui active la transparence du PNG
+        version: '1.1.0',
+        attribution: 'GeoServer',
+        tiled: true
+    }).addTo(map);
+    
+    console.log("Couche WMS ajoutée :", layerName);
+}
     async function infoetatDeLair(lat,lon){
-        const baseURL = "http://100.81.197.4:8080/geoserver/webmapping/wfs";
+        const baseURL = "/geoserver/webmapping/wfs";
         const cqlFilter = `INTERSECTS(geom, SRID=4326;POINT(${lon} ${lat}))`;
 
         const params = new URLSearchParams({
@@ -242,40 +367,380 @@ async function addWFSLayer(lat, lon, layerName) {
         const data = await response.json();
       //  console.log(data);
         const etatDeAir = data.features[0].properties.lib_qual;
-        document.getElementById('etatdelair').innerHTML = `l'air est : ${etatDeAir}`;
+        document.getElementById('etatdelair').innerHTML = `La qualité de l'air est : ${etatDeAir}`;
         } catch (error){
             console.error('Erreur WFS : ', error)
         }
     } 
     async function infoPluie(lat,lon){
-        const baseURL = "http://100.81.197.4:8080/geoserver/webmapping/wms";
-        const cqlFilter = `INTERSECTS(geom, SRID=4326;POINT(${lat} ${lon}))`;
+        const baseURL = "/geoserver/webmapping/wfs";
+        // On s'assure de l'ordre Longitude Latitude
+        const cqlFilter = `INTERSECTS(geom, SRID=4326;POINT(${lon} ${lat}))`;
 
         const params = new URLSearchParams({
+            service: 'WFS',
+            version: '2.0.0',
+            request: 'GetFeature',
+            typeNames: `webmapping:vue_pluie_vecteur`,
+            outputFormat: 'application/json',
+            CQL_FILTER: cqlFilter
+        });
+        
+        try {
+            const response = await fetch(`${baseURL}?${params.toString()}`);
+            const data = await response.json();
+            
+            // LA PROTECTION EST ICI : On vérifie si "features" n'est pas vide
+            if (data.features && data.features.length > 0) {
+                const Precipitation = data.features[0].properties.precipitation;
+                document.getElementById('etatdepluie').innerHTML = `Pluie : ${Precipitation} mm`;
+            } else {
+                // Si c'est vide, on ne plante pas, on affiche juste un message
+                console.log("Pas de pluie détectée ici.");
+                document.getElementById('etatdepluie').innerHTML = "Pluie : Aucune";
+            }
+        } catch (error){
+            console.error('Erreur Info Pluie : ', error)
+        }        
+    }
+
+   async function infoVigilance(lat, lon) {
+    // 1. Configuration de la requête WFS
+    const baseURL = "/geoserver/webmapping/wfs";
+    // Rappel : Ordre Longitude Latitude pour GeoServer
+    const cqlFilter = `INTERSECTS(geom, SRID=4326;POINT(${lon} ${lat}))`;
+
+    const params = new URLSearchParams({
         service: 'WFS',
         version: '2.0.0',
         request: 'GetFeature',
-        typeNames: `webmapping:vue_pluie_vecteur`,
+        typeNames: `webmapping:meteo_vigilance_live`, // Ton nom de couche
         outputFormat: 'application/json',
         CQL_FILTER: cqlFilter
     });
+
     try {
         const response = await fetch(`${baseURL}?${params.toString()}`);
-        console.log(response);
         const data = await response.json();
-        console.log(data);
-        const Precipitation = data.features[0].properties.precipitation;
-        document.getElementById('etatdepluie').innerHTML = `la pluie est : ${Precipitation}`;
-        } catch (error){
-            console.error('Erreur WFS : ', error)
-        }        
+
+        // On récupère la balise HTML une seule fois
+        const divVigilance = document.getElementById('etatvigilance');
+
+        // 2. Traitement des données
+        if (data.features && data.features.length > 0) {
+            
+            // Récupération des propriétés (Vérifie bien ces noms dans ta console !)
+            const props = data.features[0].properties;
+            const zone = props.nom_officiel;        
+            const niveau = props.niveau_vigilance;  
+            const risques = props.risques_meteo;   
+
+            // Gestion des couleurs
+            let couleurTexte = "Verte";
+            let styleColor = "green";
+
+            if (niveau == 2) { couleurTexte = "Jaune"; styleColor = "#FFD700"; } // Jaune Or
+            if (niveau == 3) { couleurTexte = "Orange"; styleColor = "orange"; }
+            if (niveau == 4) { couleurTexte = "ROUGE"; styleColor = "red"; }
+
+            // Affichage dans le panneau
+            if (divVigilance) {
+                divVigilance.innerHTML = 
+                    `Département : <b>${zone}</b><br>` +
+                    `Niveau : <b style="color:${styleColor}; font-size:1.2em;">${couleurTexte}</b><br>` +
+                    `<small>Risques : ${risques}</small>`;
+            } 
+
+        } else {
+            // Cas où on est hors zone ou pas de données
+            if (divVigilance) {
+                divVigilance.innerHTML = "Zone hors vigilance Météo France";
+            }
+        }
+
+    } catch (error) {
+        console.error('Erreur Info Vigilance :', error);
     }
+}
+
+async function infoInondation(lat, lon) {
+    const baseURL = "/geoserver/webmapping/wfs";
+    
+    // Toujours l'ordre Longitude Latitude pour GeoServer !
+    const cqlFilter = `INTERSECTS(geom, POINT(${lon} ${lat}))`;
+
+    const params = new URLSearchParams({
+        service: 'WFS',
+        version: '1.0.0', // On reste en 1.0.0 c'est plus sûr pour les points
+        request: 'GetFeature',
+        typeName: `webmapping:inondation`, // ⚠️ VERIFIE CE NOM (inondation ou Debroussaillement_light ?)
+        outputFormat: 'application/json',
+        srsName: 'EPSG:4326',
+        CQL_FILTER: cqlFilter
+    });
+
+    try {
+        const response = await fetch(`${baseURL}?${params.toString()}`);
+        const data = await response.json();
+        
+        const divInfo = document.getElementById('infoInondation');
+
+        // LA LOGIQUE EST ICI :
+        if (data.features && data.features.length > 0) {
+            // SCÉNARIO 1 : Le point EST dans la zone
+            // On peut mettre du rouge pour alerter
+            divInfo.innerHTML = `⚠️ <b>ATTENTION :</b> Vous êtes en zone inondable.`;
+            divInfo.style.color = "red"; 
+            divInfo.style.backgroundColor = "#ffe6e6"; // Fond rouge très clair
+            divInfo.style.padding = "10px";
+            divInfo.style.borderRadius = "5px";
+
+        } else {
+            // SCÉNARIO 2 : Le point N'EST PAS dans la zone (Tableau vide)
+            divInfo.innerHTML = `✅ Zone non inondable.`;
+            divInfo.style.color = "green";
+            divInfo.style.backgroundColor = "transparent";
+            divInfo.style.padding = "0";
+        }
+
+    } catch (error) {
+        console.error('Erreur Info Inondation : ', error);
+    }
+}
+
+
+
+async function infoDebrou(lat, lon) {
+    const baseURL = "/geoserver/webmapping/wfs";
+    
+    // Toujours l'ordre Longitude Latitude pour GeoServer !
+    const cqlFilter = `INTERSECTS(geom, POINT(${lon} ${lat}))`;
+
+    const params = new URLSearchParams({
+        service: 'WFS',
+        version: '1.0.0', // On reste en 1.0.0 c'est plus sûr pour les points
+        request: 'GetFeature',
+        typeName: `webmapping:Debroussaillement_light`, 
+        outputFormat: 'application/json',
+        srsName: 'EPSG:4326',
+        CQL_FILTER: cqlFilter
+    });
+
+    try {
+        const response = await fetch(`${baseURL}?${params.toString()}`);
+        const data = await response.json();
+        
+        const divInfo = document.getElementById('infoDebrou');
+
+        // LA LOGIQUE EST ICI :
+        if (data.features && data.features.length > 0) {
+            // SCÉNARIO 1 : Le point EST dans la zone
+            // On peut mettre du rouge pour alerter
+            divInfo.innerHTML = `⚠️ <b>ATTENTION :</b> Vous êtes en zone de Débroussaillement ! Risque Incendie.`;
+            divInfo.style.color = "red"; 
+            divInfo.style.backgroundColor = "#ffe6e6"; // Fond rouge très clair
+            divInfo.style.padding = "10px";
+            divInfo.style.borderRadius = "5px";
+
+        } else {
+            // SCÉNARIO 2 : Le point N'EST PAS dans la zone (Tableau vide)
+            divInfo.innerHTML = `✅ Vous n'êtes pas en zone de débroussaillement.`;
+            divInfo.style.color = "green";
+            divInfo.style.backgroundColor = "transparent";
+            divInfo.style.padding = "0";
+        }
+
+    } catch (error) {
+        console.error('Erreur Info Inondation : ', error);
+    }
+}
+// Variable globale pour stocker la légende active
+let currentLegend = null;
+
+function updateLegend(layerName) {
+    // 1. On cible la div dans le panneau de gauche
+    const divLegende = document.getElementById('panneauLegende');
+    
+    // 2. NETTOYAGE : On vide et on cache la boîte par défaut
+    divLegende.innerHTML = '';
+    divLegende.style.display = 'none';
+
+    // 3. LOGIQUE SELON LA COUCHE
+
+    // --- Cas : Qualité de l'Air ---
+    if (layerName.includes('atmo')) {
+        divLegende.style.display = 'block'; // On affiche la boîte
+        
+        let html = '<h4>🌫️ Légende : Qualité Air</h4>';
+        
+        const grades = ["Bon", "Moyen", "Dégradé", "Mauvais", "Très Mauvais", "Extrême"];
+        const colors = ['#50f0e6', '#63bda4', '#efe643', '#ea5254', '#951636', '#882081'];
+
+        for (let i = 0; i < grades.length; i++) {
+            html += `
+                <div class="legende-item">
+                    <span class="color-square" style="background:${colors[i]}"></span>
+                    <span>${grades[i]}</span>
+                </div>`;
+        }
+     
+        divLegende.innerHTML = html; 
+    }
+    else if(layerName.includes('inondation')) {
+        divLegende.style.display = 'block'; // On affiche la boîte
+        
+        let html = '<h4>💧 Légende : </h4>';
+        
+        const grades = ["Zones inondables"];
+        const colors = ['#3a96d8'];
+
+        for (let i = 0; i < grades.length; i++) {
+            html += `
+                <div class="legende-item">
+                    <span class="color-square" style="background:${colors[i]}"></span>
+                    <span>${grades[i]}</span>
+                </div>`; }
+        divLegende.innerHTML = html; 
+    }
+    else if(layerName.includes('Debroussaillement')) {
+        divLegende.style.display = 'block'; // On affiche la boîte
+        
+        let html = '<h4> 🔥Légende : Debroussaillement</h4>';
+        
+        const grades = ["Zone  de débroussaillement obligatoire"];
+        const colors = ['#dc1c0f'];
+
+        for (let i = 0; i < grades.length; i++) {
+            html += `
+                <div class="legende-item">
+                    <span class="color-square" style="background:${colors[i]}"></span>
+                    <span>${grades[i]}</span>
+                </div>`; }
+        divLegende.innerHTML = html; 
+    }
+        else if(layerName.includes('vigilance')) {
+        divLegende.style.display = 'block'; // On affiche la boîte
+        
+        let html = '<h4> ⚠️Légende : Vigilance Météo</h4>';
+        
+        const grades = ["Vigilance Verte","Vigilance Jaune","Vigilance Orange","Vigilance Rouge"];
+        const colors = ['green','#FFD700','orange','red'];
+
+        for (let i = 0; i < grades.length; i++) {
+            html += `
+                <div class="legende-item">
+                    <span class="color-square" style="background:${colors[i]}"></span>
+                    <span>${grades[i]}</span>
+                </div>`; }
+        divLegende.innerHTML = html; 
+    }
+        else if(layerName.includes('pluie')) {
+            divLegende.style.display = 'block'; // On affiche la boîte
+            
+            let html = '<h4> ☔Légende :Pluie </h4>';
+            
+            const grades = ["<0.1 mm","<2 mm","<10 mm","<30 mm " ];
+            const colors = ['#87CEEB','#0000FF','#800080','#FF0000'];
+
+            for (let i = 0; i < grades.length; i++) {
+                html += `
+                    <div class="legende-item">
+                        <span class="color-square" style="background:${colors[i]}"></span>
+                        <span>${grades[i]}</span>
+                    </div>`; }
+            divLegende.innerHTML = html; 
+        }
+    }
+function updateSource(layerName) {
+    // 1. On cible la div (Attention : vérifie que tu as bien créé une div avec l'id="panneauSource" dans ton HTML !)
+    const divSource = document.getElementById('panneauSource');
+
+    
+    // Sécurité : si la div n'existe pas, on arrête tout pour éviter les bugs
+    if (!divSource) return; 
+
+    // 2. NETTOYAGE
+    divSource.innerHTML = '';
+    divSource.style.display = 'none';
+
+    // 3. LOGIQUE SELON LA COUCHE
+
+    // --- Cas : Qualité de l'Air ---
+    if (layerName.includes('atmo')) {
+        divSource.style.display = 'block'; // On affiche la boîte
+        
+        let html = '<h4>Source : Qualité Air</h4>';
+
+        // CORRECTION ICI : Syntaxe du lien HTML + fermeture du paragraphe </p>
+        let source = '<p>Données : ATMO France<br><a href="https://www.atmo-france.org/" target="_blank">Cliquez ici pour vous rendre sur ATMO</a></p>';
+        
+        // CORRECTION ICI : On utilise le "+" pour assembler, pas la virgule
+        divSource.innerHTML = html + source; 
+    }
+    else if (layerName.includes('pluie')){
+        divSource.style.display = 'block'; // On affiche la boîte
+        
+        let html = '<h4>Source : Modèle AROME</h4>';
+
+        // CORRECTION ICI : Syntaxe du lien HTML + fermeture du paragraphe </p>
+        let source = '<p>Données : Météo France (AROME)<br><a href="https://meteofrance.com/actualites-et-dossiers/modeles-prevision-meteo/" target="_blank">Cliquez ici pour avoir plus information</a></p>';
+        
+        // CORRECTION ICI : On utilise le "+" pour assembler, pas la virgule
+        divSource.innerHTML = html + source; 
+
+    }
+        else if (layerName.includes('vigilance')){
+        divSource.style.display = 'block'; // On affiche la boîte
+        
+        let html = '<h4>Source : Météo France</h4>';
+
+        // CORRECTION ICI : Syntaxe du lien HTML + fermeture du paragraphe </p>
+        let source = '<p>Données : Météo France (Vigilance)<br><a href="https://vigilance.meteofrance.fr/fr" target="_blank">Cliquez ici pour avoir plus information</a></p>';
+        
+        // CORRECTION ICI : On utilise le "+" pour assembler, pas la virgule
+        divSource.innerHTML = html + source; 
+
+    }
+            else if (layerName.includes('inondation')){
+        divSource.style.display = 'block'; // On affiche la boîte
+        
+        let html = '<h4>Source : Géorisques</h4>';
+
+        // CORRECTION ICI : Syntaxe du lien HTML + fermeture du paragraphe </p>
+        let source = '<p>Données : Zonages Inondation - Rapportage 2020 <br><a href="https://www.georisques.gouv.fr/donnees/bases-de-donnees/zonages-inondation-rapportage-2020" target="_blank">Cliquez ici pour avoir plus information</a></p>';
+        
+        // CORRECTION ICI : On utilise le "+" pour assembler, pas la virgule
+        divSource.innerHTML = html + source; 
+
+    }
+                else if (layerName.includes('Debroussaillement')){
+        divSource.style.display = 'block'; // On affiche la boîte
+        
+        let html = '<h4>Source : Débroussaillement</h4>';
+
+        // CORRECTION ICI : Syntaxe du lien HTML + fermeture du paragraphe </p>
+        let source = '<p>Obligations Légales de Débroussaillement <br><a href="https://www.georisques.gouv.fr/donnees/bases-de-donnees/obligations-legales-de-debroussaillement" target="_blank">Cliquez ici pour avoir plus information</a></p>';
+        
+        // CORRECTION ICI : On utilise le "+" pour assembler, pas la virgule
+        divSource.innerHTML = html + source; 
+
+    }
+}
+
+
+
+
+
+
 
                 // --- Lancement au chargement de la page ---
                 window.addEventListener('DOMContentLoaded', (event) => {
             loadLayers();
             infoetatDeLair(lat,lon);
             infoPluie(lat,lon);
+            infoVigilance(lat, lon);
+            infoInondation(lat, lon);
+            infoDebrou(lat, lon);
 
                 });
 
@@ -325,6 +790,8 @@ async function addWFSLayer(lat, lon, layerName) {
                 }
             });
         });
+
+
 
 
     </script>

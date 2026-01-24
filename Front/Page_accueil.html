@@ -96,13 +96,13 @@
             }
         });
 
-        function chercherAdresse() {
+         function chercherAdresse() {
             const query = adresseInput.value;
             if (query.length < 3) return;
 
             statusDiv.innerText = "Recherche de l'adresse...";
             
-            fetch('geocode.php?q=' + encodeURIComponent(query))
+            fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query))
                 .then(res => res.json())
                 .then(data => {
                     if (data.length > 0) {

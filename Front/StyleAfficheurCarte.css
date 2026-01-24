@@ -83,3 +83,79 @@ label {
 h3 {
     margin-bottom: 10px;
 }
+/* --- VERSION MOBILE (SMARTPHONE) --- */
+@media screen and (max-width: 768px) {
+
+    /* 1. On change la direction : De gauche-droite à haut-bas */
+    .page {
+        flex-direction: column; /* Empile les panneaux */
+        height: auto;           /* La hauteur s'adapte au contenu */
+        overflow-y: auto;       /* Active le scroll vertical */
+    }
+
+    /* 2. Les panneaux prennent toute la largeur */
+    .left-panel, .right-panel {
+        width: 100%;
+        height: auto;     /* La hauteur n'est plus fixée */
+        padding: 15px;    /* Un peu d'espace */
+        box-sizing: border-box; /* Pour que le padding ne casse pas la largeur */
+    }
+
+    /* 3. Ajustement du panneau d'infos (en haut) */
+    .left-panel {
+        order: 2; /* OPTIONNEL : Si tu veux mettre les infos SOUS la carte, mets '2'. Pour au-dessus, mets '0' */
+        max-height: 40vh; /* Limite la hauteur du texte pour ne pas cacher la carte */
+        overflow-y: auto; /* Scroll dans le texte si trop long */
+    }
+
+    /* 4. La Carte doit avoir une hauteur fixe sur mobile */
+    .right-panel {
+        order: 1; /* La carte apparaît en premier */
+        display: flex;
+        flex-direction: column;
+    }
+
+    #map {
+        height: 50vh;      /* La carte prend 50% de la hauteur de l'écran */
+        min-height: 400px; /* Mais jamais moins de 300px */
+        width: 100%;
+        border-radius: 10px;
+        margin-bottom: 15px;
+    }
+
+    /* 5. Grossir les boutons pour les doigts */
+    button, select, input {
+        min-height: 45px; /* Zone de touche confortable */
+        font-size: 16px;  /* Texte lisible sans zoomer */
+        margin-top: 10px;
+        width: 100%;      /* Boutons pleine largeur */
+    }
+
+    /* 6. Ajustement des textes */
+    h2 { font-size: 1.2em; }
+    p { font-size: 1em; }
+}
+
+.legende-box {
+    margin-top: 15px;
+    padding: 10px;
+    background-color: white;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    display: none; /* Caché par défaut */
+}
+.legende-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+.color-square {
+    display: inline-block;  /* <--- C'EST LA LIGNE MAGIQUE QUI MANQUAIT ! */
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
+    border-radius: 4px;
+    border: 1px solid rgba(0,0,0,0.2); /* J'ai foncé un peu le bord pour qu'on le voie mieux */
+    flex-shrink: 0; /* Empêche le carré de s'écraser sur mobile */
+}
