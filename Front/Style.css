@@ -62,6 +62,7 @@ h2 { margin-bottom: 20px; color: #333; font-size: 24px; text-align: center; text
     display: flex;
     gap: 10px;
     margin-bottom: 20px;
+    position: relative;
 }
 
 input[type="text"] {
@@ -73,7 +74,20 @@ input[type="text"] {
     outline: none;
 }
 input[type="text"]:focus { border-color: #0078A8; }
-
+.containerLoca{
+    text-align: left;
+}
+.btnrecherch{
+    background-color: #178d28;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    width: 50px;
+    cursor: pointer;
+    font-size: 30px;
+    transition: background 0.3s;
+    height: 50px;
+}
 /* Le bouton GPS (Icone) */
 .btn-gps {
     background-color: #178d28;
@@ -82,9 +96,11 @@ input[type="text"]:focus { border-color: #0078A8; }
     border-radius: 5px;
     width: 50px;
     cursor: pointer;
-    font-size: 20px;
+    font-size: 30px;
     transition: background 0.3s;
-}
+    height: 50px;
+    align-items: baseline;
+  }
 .btn-gps:hover { background-color: #005a80; }
 
 /* Le gros bouton de validation */
@@ -118,4 +134,43 @@ img {
     display: block;
     margin: auto;
 }
+.suggestions-list {
+    position: absolute;
+    top: 100%;            /* juste sous l’input */
+    left: 0;
+    width: 100%;          /* EXACTEMENT la largeur de l’input */
 
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    background: white;
+    border: 1px solid #ccc;
+    border-top: none;
+    max-height: 200px;
+    overflow-y: auto;
+
+    z-index: 9999;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+.suggestions-list li {
+    padding: 10px;
+    cursor: pointer;
+}
+
+.suggestions-list li:hover {
+    background-color: #f0f0f0;
+}
+
+.suggestions-list:empty {
+    display: none;
+}
+.input-wrapper {
+    position: relative;
+    width: 100%;      /* largeur du conteneur */
+}
+.input-wrapper input {
+    width: 100%;      /* 👈 l’input prend TOUTE la largeur */
+    box-sizing: border-box; /* évite les débordements */
+}   

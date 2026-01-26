@@ -16,13 +16,22 @@
         <h1> Êtes-vous en danger actuellement ? </h1>
         <h2>Où êtes vous ? 📍</h2>
         
-        <div class="input-group">   
-            <input type="text" id="adresseInput" placeholder="Saisir une adresse..." />
-
-            
+        <div class="input-group">
+            <div class="input-wrapper">
+                <input type="text" id="adresseInput" placeholder="Saisir une adresse..." />
+                <ul id="suggestions" class="suggestions-list"></ul>
+            </div>
+        
+            <button id="btnrecherche" class="btnrecherch">🔍</button>
+        </div>
+        
+        <div class="containerLoca">
+                        
             <button id="btnGps" class="btn-gps" title="Utiliser la position de l'appareil">
                 📡
             </button>
+                : Utiliser la position de l'appareil
+            
         </div>
 
         <div id="status">En attente de localisation...</div>
@@ -60,6 +69,7 @@
         // Éléments du DOM
         const adresseInput = document.getElementById('adresseInput');
         const btnGps = document.getElementById('btnGps');
+        const btnrecherche = document.getElementById('btnrecherche');
         const statusDiv = document.getElementById('status');
         const btnContinuer = document.getElementById('btnContinuer');
 
@@ -112,6 +122,53 @@
                 chercherAdresse();
             }
         });
+        btnrecherche.addEventListener('click',()=>{
+            chercherAdresse();
+        })
+        const suggestionsList = document.getElementById('suggestions');
+let timeout = null;
+
+adresseInput.addEventListener('input', () => {
+    const query = adresseInput.value;
+
+    if (query.length < 3) {
+        suggestionsList.innerHTML = '';
+        return;
+    }
+
+    clearTimeout(timeout);
+
+    // Anti-spam API (petit délai)
+    timeout = setTimeout(() => {
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`)
+            .then(res => res.json())
+            .then(data => {
+                suggestionsList.innerHTML = '';
+
+                data.forEach(item => {
+                    const li = document.createElement('li');
+                    li.textContent = item.display_name;
+
+                    li.addEventListener('click', () => {
+                        adresseInput.value = item.display_name;
+                        suggestionsList.innerHTML = '';
+                        updateLocation(
+                            parseFloat(item.lat),
+                            parseFloat(item.lon),
+                            'Adresse'
+                        );
+                    });
+
+                    suggestionsList.appendChild(li);
+                });
+            });
+    }, 300);
+});
+document.addEventListener('click', (e) => {
+    if (!adresseInput.contains(e.target)) {
+        suggestionsList.innerHTML = '';
+    }
+});
 
          function chercherAdresse() {
             const query = adresseInput.value;
